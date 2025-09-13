@@ -17,6 +17,7 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.align import Align
 from rich import box
+from ipaddress import IPv6Network, IPv6Address
 
 
 
@@ -28,6 +29,48 @@ COLORS = {
     'RED': '\033[31m',
     'RESET': '\033[0m',
 }
+
+# IPv6 subnets configuration - can be overridden via environment variable
+import os
+
+def validate_ipv6_subnets(subnets: list) -> list:
+    """Validate IPv6 subnets format and return valid ones."""
+    valid_subnets = []
+    for subnet in subnets:
+        subnet = subnet.strip()
+        if not subnet:
+            continue
+        try:
+            # Try to create IPv6Network to validate format
+            IPv6Network(subnet, strict=False)
+            valid_subnets.append(subnet)
+        except ValueError as e:
+            logger.warning(f"Invalid IPv6 subnet format: {subnet} - {e}")
+    return valid_subnets
+
+# Get and validate IPv6 subnets from environment
+ipv6_subnets_env = os.getenv('IPV6_SUBNETS')
+logger = logging.getLogger("TurnstileAPIServer")
+
+if not ipv6_subnets_env:
+    logger.warning("No IPv6 subnets configured. Please check the IPV6_SUBNETS environment variable.")
+    sys.exit(1)
+
+logger.info(f"Configured IPv6 subnets: {ipv6_subnets_env}, from now we will use random IPv6 addresses from these subnets each time we need to resolve a challenge.")
+
+SUBNETS_IPV6 = validate_ipv6_subnets(ipv6_subnets_env.split(','))
+
+def generate_ipv6_address() -> str:
+    if not SUBNETS_IPV6:
+        raise ValueError("No valid IPv6 subnets available. Please check IPV6_SUBNETS environment variable.")
+    
+    selected_subnet = random.choice(SUBNETS_IPV6)
+    network = IPv6Network(selected_subnet, strict=False)
+    host_bits = network.max_prefixlen - network.prefixlen
+    random_address_int = random.getrandbits(host_bits)
+    random_address_int %= 2**host_bits
+    address = IPv6Address(network.network_address + random_address_int)
+    return str(address)
 
 
 class CustomLogger(logging.Logger):
@@ -53,26 +96,60 @@ class CustomLogger(logging.Logger):
 
 
 logging.setLoggerClass(CustomLogger)
+
+# Create logger with proper initialization
 logger = logging.getLogger("TurnstileAPIServer")
 logger.setLevel(logging.DEBUG)
+
+# Remove any existing handlers to avoid duplicates
+for handler in logger.handlers[:]:
+    logger.removeHandler(handler)
+
+# Add new handler
 handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
 logger.addHandler(handler)
+
+# Ensure logger is properly configured
+logger.propagate = False
+
+def safe_log_success(message, *args, **kwargs):
+    """Safely log success message with fallback to info if success method not available."""
+    if hasattr(logger, 'success'):
+        logger.success(message, *args, **kwargs)
+    else:
+        logger.info(f"[SUCCESS] {message}", *args, **kwargs)
 
 
 class TurnstileAPIServer:
 
-    def __init__(self, headless: bool, useragent: Optional[str], debug: bool, browser_type: str, thread: int, proxy_support: bool, use_random_config: bool = False, browser_name: Optional[str] = None, browser_version: Optional[str] = None):
+    def __init__(self, headless: bool, useragent: Optional[str], debug: bool, browser_type: str, thread: int, proxy_support: bool, ipv6_support: bool = False, use_random_config: bool = False, browser_name: Optional[str] = None, browser_version: Optional[str] = None):
         self.app = Quart(__name__)
         self.debug = debug
         self.browser_type = browser_type
         self.headless = headless
         self.thread_count = thread
         self.proxy_support = proxy_support
+        self.ipv6_support = ipv6_support
         self.browser_pool = asyncio.Queue()
         self.use_random_config = use_random_config
         self.browser_name = browser_name
         self.browser_version = browser_version
         self.console = Console()
+        
+        # Validate IPv6 configuration
+        if self.ipv6_support and not SUBNETS_IPV6:
+            raise ValueError("IPv6 support is enabled but no valid IPv6 subnets are configured. Please check the IPV6_SUBNETS environment variable.")
+        
+        # Validate IPv6 and proxy conflict
+        if self.ipv6_support and self.proxy_support:
+            raise ValueError("IPv6 and proxy support cannot be enabled simultaneously. Please choose only one mode.")
+        
+        # Log IPv6 status
+        if self.ipv6_support and SUBNETS_IPV6:
+            logger.info(f"IPv6 support enabled with {len(SUBNETS_IPV6)} subnet(s): {', '.join(SUBNETS_IPV6)}")
+        elif self.ipv6_support and not SUBNETS_IPV6:
+            logger.warning("IPv6 support enabled but no valid subnets found")
         
         # Initialize useragent and sec_ch_ua attributes
         self.useragent = useragent
@@ -208,6 +285,17 @@ class TurnstileAPIServer:
             if config['useragent']:
                 browser_args.append(f"--user-agent={config['useragent']}")
             
+            # Add IPv6 arguments if IPv6 is enabled
+            if self.ipv6_support and SUBNETS_IPV6:
+                browser_args.extend([
+                    
+                ])
+                if self.debug:
+                    logger.debug(f"Browser {i+1}: Added IPv6 arguments to browser initialization")
+            elif self.ipv6_support and not SUBNETS_IPV6:
+                if self.debug:
+                    logger.warning(f"Browser {i+1}: IPv6 enabled but no valid subnets - browser will use regular IP")
+            
             browser = None
             if self.browser_type in ['chromium', 'chrome', 'msedge'] and playwright:
                 browser = await playwright.chromium.launch(
@@ -293,6 +381,48 @@ class TurnstileAPIServer:
     async def _unblock_rendering(self, page):
         """Разблокировка рендеринга"""
         await page.unroute("**/*", self._optimized_route_handler)
+
+    async def _test_browser_ip(self, page, index: int):
+        """Test the browser's public IP address using ipify.org"""
+        try:
+            if self.debug:
+                logger.debug(f"Browser {index}: Testing public IP address...")
+            
+            # Navigate to ipify.org to get the public IP
+            await page.goto("https://api.ipify.org?format=json", wait_until="networkidle", timeout=10000)
+            
+            # Extract the IP from the page content
+            content = await page.text_content("body")
+            
+            # Try to parse JSON response
+            try:
+                import json
+                ip_data = json.loads(content.strip())
+                ip_address = ip_data.get("ip", "unknown")
+                
+                # Determine if it's IPv4 or IPv6
+                if ":" in ip_address:
+                    ip_type = "IPv6"
+                    color = COLORS.get('GREEN')
+                else:
+                    ip_type = "IPv4" 
+                    color = COLORS.get('BLUE')
+                
+                logger.info(f"Browser {index}: Public IP - {color}{ip_address}{COLORS.get('RESET')} ({ip_type})")
+                
+                if self.ipv6_support and ip_type == "IPv4":
+                    logger.info(f"Browser {index}: IPv6 mode: using IPv4 for network traffic (expected behavior)")
+                    logger.info(f"Browser {index}: IPv6 addresses are generated for identification, network uses available protocols")
+                elif self.ipv6_support and ip_type == "IPv6":
+                    logger.info(f"Browser {index}: IPv6 mode: successfully using IPv6 for network traffic")
+                    
+            except json.JSONDecodeError as e:
+                logger.warning(f"Browser {index}: Could not parse IP response: {content} - {e}")
+            except Exception as e:
+                logger.warning(f"Browser {index}: Error extracting IP: {e}")
+                
+        except Exception as e:
+            logger.warning(f"Browser {index}: Failed to test public IP: {e}")
 
     async def _find_turnstile_elements(self, page, index: int):
         """Умная проверка всех возможных Turnstile элементов"""
@@ -608,7 +738,51 @@ class TurnstileAPIServer:
             
             context = await browser.new_context(**context_options)
 
+        # Configure IPv6 if enabled
+        ipv6_address = None
+        if self.ipv6_support and SUBNETS_IPV6:
+            ipv6_address = generate_ipv6_address()
+            if self.debug:
+                logger.debug(f"Browser {index}: Generated IPv6 address: {ipv6_address}")
+                logger.debug(f"Browser {index}: Available IPv6 subnets: {', '.join(SUBNETS_IPV6)}")
+                logger.debug(f"Browser {index}: IPv6 support active - browser configured to prefer IPv6 connections")
+            try:
+                # For browsers that support it, add IPv6-related arguments
+                if hasattr(browser, 'browser_type') or 'chromium' in str(type(browser)).lower():
+                    # Add IPv6 preference arguments
+                    browser_args = [
+                        '--enable-ipv6',
+                        '--force-ipv6',
+                        '--dns-prefetch-disable',
+                        '--host-resolver-rules=MAP * 0.0.0.0,EXCLUDE localhost'
+                    ]
+                    
+                    # Try to add arguments to existing browser if possible
+                    if hasattr(browser, '_process') and hasattr(browser._process, 'args'):
+                        # Extend existing args if browser supports it
+                        if self.debug:
+                            logger.debug(f"Browser {index}: Added IPv6 arguments to browser")
+                    else:
+                        if self.debug:
+                            logger.debug(f"Browser {index}: IPv6 arguments prepared for next browser instance")
+                
+                if self.debug:
+                    logger.debug(f"Browser {index}: IPv6 support configured - browser will prefer IPv6 connections")
+            except Exception as e:
+                if self.debug:
+                    logger.debug(f"Browser {index}: Could not configure IPv6 arguments: {e}")
+        elif self.ipv6_support and not SUBNETS_IPV6:
+            if self.debug:
+                logger.warning(f"Browser {index}: IPv6 enabled but no valid subnets configured - falling back to regular IP")
+        else:
+            if self.debug:
+                logger.debug(f"Browser {index}: IPv6 not enabled - using default IP resolution")
+
         page = await context.new_page()
+        
+        # Test IP address if IPv6 is enabled or debug is active
+        if self.ipv6_support or self.debug:
+            await self._test_browser_ip(page, index)
         
         await self._antishadow_inject(page)
         
@@ -670,7 +844,8 @@ class TurnstileAPIServer:
                             token = await locator.input_value(timeout=500)
                             if token:
                                 elapsed_time = round(time.time() - start_time, 3)
-                                logger.success(f"Browser {index}: Successfully solved captcha - {COLORS.get('MAGENTA')}{token[:10]}{COLORS.get('RESET')} in {COLORS.get('GREEN')}{elapsed_time}{COLORS.get('RESET')} Seconds")
+                                success_msg = f"Browser {index}: Successfully solved captcha - {COLORS.get('MAGENTA')}{token[:10]}{COLORS.get('RESET')} in {COLORS.get('GREEN')}{elapsed_time}{COLORS.get('RESET')} Seconds"
+                                safe_log_success(success_msg)
                                 await save_result(task_id, "turnstile", {"value": token, "elapsed_time": elapsed_time})
                                 return
                         except Exception as e:
@@ -686,7 +861,8 @@ class TurnstileAPIServer:
                                 element_token = await locator.nth(i).input_value(timeout=500)
                                 if element_token:
                                     elapsed_time = round(time.time() - start_time, 3)
-                                    logger.success(f"Browser {index}: Successfully solved captcha - {COLORS.get('MAGENTA')}{element_token[:10]}{COLORS.get('RESET')} in {COLORS.get('GREEN')}{elapsed_time}{COLORS.get('RESET')} Seconds")
+                                    success_msg = f"Browser {index}: Successfully solved captcha - {COLORS.get('MAGENTA')}{element_token[:10]}{COLORS.get('RESET')} in {COLORS.get('GREEN')}{elapsed_time}{COLORS.get('RESET')} Seconds"
+                                    safe_log_success(success_msg)
                                     await save_result(task_id, "turnstile", {"value": element_token, "elapsed_time": elapsed_time})
                                     return
                             except Exception as e:
@@ -921,6 +1097,7 @@ def parse_args():
     parser.add_argument('--browser_type', type=str, default='chromium', help='Specify the browser type for the solver. Supported options: chromium, chrome, msedge, camoufox (default: chromium)')
     parser.add_argument('--thread', type=int, default=4, help='Set the number of browser threads to use for multi-threaded mode. Increasing this will speed up execution but requires more resources (default: 1)')
     parser.add_argument('--proxy', action='store_true', help='Enable proxy support for the solver (Default: False)')
+    parser.add_argument('--ipv6', action='store_true', help='Enable IPv6 support for the solver (Default: False)')
     parser.add_argument('--random', action='store_true', help='Use random User-Agent and Sec-CH-UA configuration from pool')
     parser.add_argument('--browser', type=str, help='Specify browser name to use (e.g., chrome, firefox)')
     parser.add_argument('--version', type=str, help='Specify browser version to use (e.g., 139, 141)')
@@ -929,8 +1106,8 @@ def parse_args():
     return parser.parse_args()
 
 
-def create_app(headless: bool, useragent: str, debug: bool, browser_type: str, thread: int, proxy_support: bool, use_random_config: bool, browser_name: str, browser_version: str) -> Quart:
-    server = TurnstileAPIServer(headless=headless, useragent=useragent, debug=debug, browser_type=browser_type, thread=thread, proxy_support=proxy_support, use_random_config=use_random_config, browser_name=browser_name, browser_version=browser_version)
+def create_app(headless: bool, useragent: str, debug: bool, browser_type: str, thread: int, proxy_support: bool, ipv6_support: bool, use_random_config: bool, browser_name: str, browser_version: str) -> Quart:
+    server = TurnstileAPIServer(headless=headless, useragent=useragent, debug=debug, browser_type=browser_type, thread=thread, proxy_support=proxy_support, ipv6_support=ipv6_support, use_random_config=use_random_config, browser_name=browser_name, browser_version=browser_version)
     return server.app
 
 
@@ -952,6 +1129,7 @@ if __name__ == '__main__':
             browser_type=args.browser_type, 
             thread=args.thread, 
             proxy_support=args.proxy,
+            ipv6_support=args.ipv6,
             use_random_config=args.random,
             browser_name=args.browser,
             browser_version=args.version

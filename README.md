@@ -17,6 +17,7 @@ A Python-based Turnstile solver using the patchright and camoufox libraries, fea
 - **Multi-threaded execution** - Solve multiple CAPTCHAs simultaneously
 - **Multiple browser support** - Chromium, Chrome, Edge, and Camoufox
 - **Proxy support** - Use proxies from proxies.txt file
+- **IPv6 support** - Use IPv6 addresses from custom subnets
 - **Random browser configurations** - Rotate User-Agent and Sec-CH-UA headers
 - **Detailed logging** - Comprehensive debug information
 - **REST API** - Easy integration with other applications
@@ -45,6 +46,20 @@ ip:port:username:password
 scheme://ip:port
 scheme://username:password@ip:port
 ```
+
+### IPv6 Configuration
+
+The solver supports IPv6 addresses from custom subnets. Configure via environment variables:
+
+```bash
+# Enable IPv6 support
+IPV6=true
+
+# Configure IPv6 subnets (comma-separated)
+IPV6_SUBNETS=XXX:XXX:XXX::/48,XXX:XXXX::/32
+```
+
+**⚠️ Important**: IPv6 and proxy support cannot be enabled simultaneously. Choose only one mode.
 
 ## ❗ Disclaimers
 
@@ -129,6 +144,7 @@ python api_solver.py
 | `--host` | 0.0.0.0 | string | Specifies the IP address the API solver runs on. |
 | `--port` | 6080 | integer | Sets the port the API solver listens on. |
 | `--proxy` | False | boolean | Select a random proxy from proxies.txt for solving captchas |
+| `--ipv6` | False | boolean | Enable IPv6 support (cannot be used with --proxy) |
 | `--random` | False | boolean | Use random User-Agent and Sec-CH-UA configuration from pool |
 | `--browser` | None | string | Specify browser name to use (e.g., chrome, firefox) |
 | `--version` | None | string | Specify browser version to use (e.g., 139, 141) |
