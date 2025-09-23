@@ -1,0 +1,22 @@
+services:
+  turnstile-solver:
+    build: .
+    network_mode: host
+    ports:
+      - "${PORT:-5072}:${PORT:-5072}"
+    volumes:
+      - ./proxies.txt:/app/proxies.txt
+      - ./db_results.db:/app/db_results.db
+    environment:
+      - PYTHONUNBUFFERED=1
+      - HOST=${HOST:-0.0.0.0}
+      - PORT=${PORT:-5072}
+      - BROWSER_TYPE=${BROWSER_TYPE:-chromium}
+      - DEBUG=${DEBUG:-false}
+      - PROXY=${PROXY:-false}
+      - IPV6=${IPV6:-false}
+      - THREAD=${THREAD:-4}
+      - USERAGENT=${USERAGENT:-}
+      - NO_HEADLESS=${NO_HEADLESS:-false}
+      - IPV6_SUBNETS=${IPV6_SUBNETS}
+    restart: unless-stopped
