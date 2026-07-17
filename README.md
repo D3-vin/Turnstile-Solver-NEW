@@ -1,257 +1,214 @@
-# Cloudflare - Turnstile Solver NEW
+# 🚀 Cloudflare Turnstile + Challenge Solver
 
-## 📢 Connect with Us
+Local API solver for Cloudflare Turnstile and IUAM (Under Attack Mode) — harvests tokens and cf_clearance cookies via a real browser.
 
-- **📢 Channel**: [https://t.me/D3_vin](https://t.me/D3_vin) - Latest updates and releases
-- **💬 Chat**: [https://t.me/D3vin_chat](https://t.me/D3vin_chat) - Community support and discussions
-- **📁 GitHub**: [https://github.com/D3-vin](https://github.com/D3-vin) - Source code and development
+[![Version](https://img.shields.io/badge/version-2.0.0-blue)](https://github.com/D3-vin/Turnstile-Solver-NEW/releases)
+[![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)](https://www.python.org/)
+[![License](https://img.shields.io/badge/license-Educational%20Use-green)](LICENSE)
 
-![Python](https://img.shields.io/badge/Python-3.6+-blue)
-![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)
-![License](https://img.shields.io/badge/License-Educational%20Use-green)
+[![Telegram Channel](https://img.shields.io/badge/Telegram-Channel-blue?logo=telegram)](https://t.me/D3_vin)
+[![Telegram Chat](https://img.shields.io/badge/Telegram-Chat-blue?logo=telegram)](https://t.me/D3vin_chat)
+[![GitHub](https://img.shields.io/badge/GitHub-Repository-black?logo=github)](https://github.com/D3-vin/Turnstile-Solver-NEW)
 
+[Features](#features) • [Quick Start](#quick-start) • [Usage](#usage) • [API](#api-documentation) • [Contact](#contact)
 
-❤️ Support the Project
-If you find this collection valuable and appreciate the effort involved in obtaining and sharing these insights, please consider supporting the project. Your contribution helps keep this resource updated and allows for further exploration.
+[English](#) | [Русский](README_RU.md)
 
-You can show your support via:
+---
 
-Cryptocurrency:
-- **EVM:** 0xeba21af63e707ce84b76a87d0ba82140048c057e  (ETH,BNB,etc)
+> **New in 2.0:** IUAM support — pass Cloudflare "Under Attack" interstitials and harvest `cf_clearance` via the new `/cf_clearance` endpoint. Modular architecture (`turnstile` / `cf_clearance` / `core`), in-memory task storage, quiet logs.
+
+## Features
+
+- 🎯 **Turnstile solving** - Route-intercept stub page with real-page fallback, 5-15 seconds per solve
+- 🛡️ **IUAM / Challenge pass** - Managed Challenge + JS Challenge interstitials, harvests `cf_clearance` with the full replay bundle (cookies, User-Agent, headers)
+- 🚀 **Multi-threaded** - Solve multiple tasks simultaneously with a concurrency limit
+- 🌐 **Multiple browsers** - Chrome, Edge, Chromium, Camoufox
+- 🔌 **Proxy support** - All formats from `proxies.txt`, plus per-request proxy for `/cf_clearance`
+- 📊 **REST API** - Async task model (create task → poll result), easy to integrate
+- 📦 **No database** - Tasks live in memory, nothing to maintain
+
+---
+
+## Quick Start
+
+### 1. Install
+
+```bash
+git clone https://github.com/D3-vin/Turnstile-Solver-NEW.git
+cd Turnstile-Solver-NEW
+python -m venv venv
+venv\Scripts\activate          # Windows
+# source venv/bin/activate     # macOS/Linux
+pip install -r requirements.txt
+```
+
+### 2. Install a browser
+
+```bash
+python -m patchright install chromium   # or: install msedge / use system Chrome
+python -m camoufox fetch                # if you want Camoufox
+```
+
+### 3. Run
+
+```bash
+python api.py
+```
+
+Server starts on `http://0.0.0.0:5072`.
+
+---
+
+## Usage
+
+```bash
+python api.py [options]
+
+Options:
+  --no-headless           Show the browser window (default: headless)
+  --browser_type string   chromium | chrome | msedge | camoufox (default "chrome")
+  --thread int            Max concurrent solves (default 4)
+  --proxy                 Use random proxy from proxies.txt
+  --useragent string      Custom User-Agent
+  --debug                 Verbose logging + HTTP access logs
+  --host string           Listen address (default "0.0.0.0")
+  --port string           Listen port (default "5072")
+```
+
+Test client:
+
+```bash
+python test_solve.py                            # Turnstile (bypass.city)
+python test_solve.py --type cf_clearance        # IUAM (ivasms.com)
+python test_solve.py --type cf_clearance --proxy http://user:pass@ip:port
+```
+
+---
+
+## API Documentation
+
+### Solve Turnstile
+
+```
+GET /turnstile?url=https://example.com&sitekey=0x4AAAAAAA
+```
+
+| Parameter | Type | Description | Required |
+|-----------|------|-------------|----------|
+| `url` | string | Page where Turnstile is validated | Yes |
+| `sitekey` | string | Turnstile site key | Yes |
+| `action` | string | Widget `data-action` binding | No |
+| `cdata` | string | Widget `data-cdata` binding | No |
+
+### Pass IUAM (cf_clearance)
+
+```
+GET /cf_clearance?url=https://protected.com&proxy=http://user:pass@ip:port
+```
+
+| Parameter | Type | Description | Required |
+|-----------|------|-------------|----------|
+| `url` | string | Cloudflare-protected page URL | Yes |
+| `proxy` | string | Per-request proxy (cf_clearance is bound to the exit IP) | No |
+| `timeout` | int | Solve timeout, seconds (default 60) | No |
+
+Both endpoints return a task:
+
+```json
+{ "errorId": 0, "taskId": "d2cbb257-9c37-4f9c-9bc7-1eaee72d96a8" }
+```
+
+### Get Result
+
+```
+GET /result?id=d2cbb257-9c37-4f9c-9bc7-1eaee72d96a8
+```
+
+Processing:
+
+```json
+{ "status": "processing" }
+```
+
+Turnstile ready:
+
+```json
+{ "errorId": 0, "status": "ready", "solution": { "token": "0.KBtT-r..." } }
+```
+
+cf_clearance ready:
+
+```json
+{
+  "errorId": 0,
+  "status": "ready",
+  "solution": {
+    "cf_clearance": { "name": "cf_clearance", "value": "...", "domain": ".example.com" },
+    "cookies": [ "..." ],
+    "user_agent": "Mozilla/5.0 ...",
+    "headers": { "User-Agent": "...", "Accept-Language": "..." },
+    "proxy": "http://...",
+    "warning": "cf_clearance is bound to IP + JA3/TLS + User-Agent..."
+  }
+}
+```
+
+> ⚠️ Replay `cf_clearance` only from the same IP, with the returned `user_agent`, over a client with a matching TLS fingerprint (curl-impersonate or a real browser).
+
+---
+
+## Project Structure
+
+```
+Turnstile-Solver-NEW/
+├── api.py               # Quart app: routes, in-memory tasks, CLI
+├── test_solve.py        # Test client (turnstile / cf_clearance)
+├── requirements.txt
+├── core/
+│   ├── browser.py       # Browser config, launch, context, proxy helpers
+│   ├── logger.py        # Colored logger
+│   └── templates.py     # Turnstile HTML template, JS snippets, route glob
+├── turnstile/
+│   └── solve.py         # Route-intercept + real-page Turnstile solving
+└── cf_clearance/
+    └── solve.py         # IUAM interstitial pass + cf_clearance harvest
+```
+
+---
+
+## Troubleshooting
+
+### "Browser not found"
+Install the browser: `python -m patchright install chromium` (or use `--browser_type chrome` with system Chrome).
+
+### "Port already in use"
+Change it: `python api.py --port 5080`.
+
+### cf_clearance not set (challenge unsolved)
+Datacenter IPs are scored harshly — run with `--no-headless` and/or a residential proxy.
+
+---
+
+## Contact
+
+- **GitHub**: https://github.com/D3-vin/Turnstile-Solver-NEW
+- **Telegram Channel**: [@D3_vin](https://t.me/D3_vin)
+- **Telegram Chat**: [@D3vin_chat](https://t.me/D3vin_chat)
+
+### ❤️ Support the Project
+
+- **EVM:** 0xeba21af63e707ce84b76a87d0ba82140048c057e (ETH, BNB, etc)
 - **TRON:** TEfECnyz5G1EkFrUqnbFcWLVdLvAgW9Raa
 - **TON:** UQCJ7KC2zxV_zKwLahaHf9jxy0vsWRcvQFie_FUBJW-9LcEW
 - **BTC:** bc1qdag98y5yahs6wf7rsfeh4cadsjfzmn5ngpjrcf
 - **SOL:** EwXXR4VqmWSNz1sjhZ8qcQ882i4URwAwhixSPEbDzyv6
 - **SUI:** 0x76da9b74c61508fbbd0b3e1989446e036b0622f252dd8d07c3fce759b239b47d
 
+---
 
-🙏 Thank you for your support!
+## License
 
-A Python-based Turnstile solver using the patchright and camoufox libraries, featuring multi-threaded execution, API integration, and support for different browsers. It solves CAPTCHAs quickly and efficiently, with customizable configurations and detailed logging.
+Educational use only - see [LICENSE](LICENSE) file.
 
-## 🚀 Features
-
-- **Multi-threaded execution** - Solve multiple CAPTCHAs simultaneously
-- **Multiple browser support** - Chromium, Chrome, Edge, and Camoufox
-- **Proxy support** - Use proxies from proxies.txt file
-- **Random browser configurations** - Rotate User-Agent and Sec-CH-UA headers
-- **Detailed logging** - Comprehensive debug information
-- **REST API** - Easy integration with other applications
-- **Database storage** - SQLite database for result persistence
-- **Automatic cleanup** - Old results are automatically cleaned up
-- **Image blocking** - Optimized performance by blocking unnecessary images
-
-## 🔧 Configuration
-
-### Browser Configurations
-
-The solver supports various browser configurations with realistic User-Agent strings and Sec-CH-UA headers:
-
-- **Chrome** (versions 136-139)
-- **Edge** (versions 137-139)
-- **Avast** (versions 137-138)
-- **Brave** (versions 137-139)
-
-### Proxy Format
-
-Add proxies to `proxies.txt` in the following formats:
-
-```
-ip:port
-ip:port:username:password
-scheme://ip:port
-scheme://username:password@ip:port
-```
-
-## ❗ Disclaimers
-
-I am not responsible for anything that may happen, such as API Blocking, IP ban, etc.  
-This was a quick project that was made for fun and personal use if you want to see further updates, star the repo & create an "issue" here
-
-## ⚙️ Installation Instructions
-
-Ensure Python 3.8+ is installed on your system.
-
-### 1. Create a Python virtual environment:
-
-```bash
-python -m venv venv
-```
-
-### 2. Activate the virtual environment:
-
-**On Windows:**
-```bash
-venv\Scripts\activate
-```
-
-**On macOS/Linux:**
-```bash
-source venv/bin/activate
-```
-
-### 3. Install required dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Select the browser to install:
-
-You can choose between Chromium, Chrome, Edge or Camoufox:
-
-**To install Chromium:**
-```bash
-python -m patchright install chromium
-```
-
-**To install Chrome:**
-- **On macOS/Windows:** [Click here](https://www.google.com/chrome/)
-- **On Linux (Debian/Ubuntu-based):**
-```bash
-apt update
-wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-apt install -y ./google-chrome-stable_current_amd64.deb
-apt -f install -y  # Fix dependencies if needed
-rm ./google-chrome-stable_current_amd64.deb
-```
-
-**To install Edge:**
-```bash
-python -m patchright install msedge
-```
-
-**To install Camoufox:**
-```bash
-python -m camoufox fetch
-```
-
-### 5. Start testing:
-
-Run the script (Check [🔧 Command line arguments](#-command-line-arguments) for better setup):
-
-```bash
-python api_solver.py
-```
-
-## 🔧 Command line arguments
-
-| Parameter | Default | Type | Description |
-|-----------|---------|------|-------------|
-| `--no-headless` | False | boolean | Runs the browser with GUI (disable headless mode). By default, headless mode is enabled. |
-| `--useragent` | None | string | Specifies a custom User-Agent string for the browser. (No need to set if camoufox used) |
-| `--debug` | False | boolean | Enables or disables debug mode for additional logging and troubleshooting. |
-| `--browser_type` | chromium | string | Specify the browser type for the solver. Supported options: chromium, chrome, msedge, camoufox |
-| `--thread` | 4 | integer | Sets the number of browser threads to use in multi-threaded mode. |
-| `--host` | 0.0.0.0 | string | Specifies the IP address the API solver runs on. |
-| `--port` | 6080 | integer | Sets the port the API solver listens on. |
-| `--proxy` | False | boolean | Select a random proxy from proxies.txt for solving captchas |
-| `--random` | False | boolean | Use random User-Agent and Sec-CH-UA configuration from pool |
-| `--browser` | None | string | Specify browser name to use (e.g., chrome, firefox) |
-| `--version` | None | string | Specify browser version to use (e.g., 139, 141) |
-
-## 📡 API Documentation
-
-### Solve turnstile
-
-```
-GET /turnstile?url=https://example.com&sitekey=0x4AAAAAAA
-```
-
-**Request Parameters:**
-
-| Parameter | Type | Description | Required |
-|-----------|------|-------------|----------|
-| `url` | string | The target URL containing the CAPTCHA. (e.g., https://example.com) | Yes |
-| `sitekey` | string | The site key for the CAPTCHA to be solved. (e.g., 0x4AAAAAAA) | Yes |
-| `action` | string | Action to trigger during CAPTCHA solving, e.g., login | No |
-| `cdata` | string | Custom data that can be used for additional CAPTCHA parameters. | No |
-
-**Response:**
-
-If the request is successfully received, the server will respond with a task_id for the CAPTCHA solving task:
-
-```json
-{
-  "task_id": "d2cbb257-9c37-4f9c-9bc7-1eaee72d96a8"
-}
-```
-
-### Get Result
-
-```
-GET /result?id=f0dbe75b-fa76-41ad-89aa-4d3a392040af
-```
-
-**Request Parameters:**
-
-| Parameter | Type | Description | Required |
-|-----------|------|-------------|----------|
-| `id` | string | The unique task ID returned from the /turnstile request. | Yes |
-
-**Response:**
-
-If the CAPTCHA is solved successfully, the server will respond with the following information:
-
-```json
-{
-  "status": "ready",
-  "value": "0.KBtT-r",
-  "elapsed_time": 7.625
-}
-```
-
-**Error Responses:**
-
-```json
-{
-  "status": "processing"
-}
-```
-
-```json
-{
-  "status": "fail",
-  "value": "CAPTCHA_FAIL",
-  "elapsed_time": 30.0
-}
-```
-
-
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Browser not found**: Make sure you've installed the required browser using the installation instructions
-2. **Permission denied**: Run with appropriate permissions or check file permissions
-3. **Port already in use**: Change the port using `--port` argument
-4. **Proxy connection failed**: Check proxy format and availability
-
-### Debug Mode
-
-Enable debug mode for detailed logging:
-
-```bash
-python api_solver.py --debug
-```
-
-## 📊 Performance
-
-- **Average solving time**: 5-15 seconds
-- **Success rate**: 95%+ (depending on site complexity)
-- **Memory usage**: ~50-100MB per browser thread
-- **CPU usage**: Moderate (depends on thread count)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
-
-## 📄 License
-
-This project is for educational purposes only. Use at your own risk.
-
+**⚠️ Disclaimer**: This tool is for educational purposes only. Use at your own risk. The author is not responsible for API blocking, IP bans, or any other consequences.
