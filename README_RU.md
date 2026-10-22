@@ -1,6 +1,6 @@
-# 🚀 Cloudflare Turnstile + Challenge Solver
+# 🚀 Cloudflare Turnstile & IUAM Automation API
 
-Локальный API-солвер для Cloudflare Turnstile и IUAM (Under Attack Mode) — получает токены и куки cf_clearance через реальный браузер.
+Локальный REST API для автоматизированного прохождения страниц-вызовов Cloudflare Turnstile и IUAM (Under Attack Mode) в реальном браузере — возвращает токены и cf_clearance-сессии.
 
 [![Version](https://img.shields.io/badge/version-2.0.0-blue)](https://github.com/D3-vin/Turnstile-Solver-NEW/releases)
 [![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)](https://www.python.org/)
@@ -20,7 +20,7 @@
 
 ## Возможности
 
-- 🎯 **Решение Turnstile** - route-intercept заглушка с fallback на реальную страницу, 5-15 секунд на решение
+- 🎯 **Автоматизация Turnstile** - route-intercept заглушка с fallback на реальную страницу, 5-15 секунд на задачу
 - 🛡️ **Прохождение IUAM / Challenge** - Managed Challenge + JS Challenge interstitial, получение `cf_clearance` с полным набором для replay (cookies, User-Agent, заголовки)
 - 🚀 **Многопоточность** - несколько задач одновременно с лимитом конкуренции
 - 🌐 **Несколько браузеров** - Chrome, Edge, Chromium, Camoufox
@@ -56,7 +56,7 @@ python -m camoufox fetch                # если нужен Camoufox
 python api.py
 ```
 
-Сервер поднимется на `http://0.0.0.0:5072`.
+Сервер стартует на `http://0.0.0.0:5072`.
 
 ---
 
@@ -66,13 +66,13 @@ python api.py
 python api.py [опции]
 
 Опции:
-  --no-headless           Показать окно браузера (по умолчанию: headless)
+  --no-headless           Показывать окно браузера (по умолчанию: headless)
   --browser_type string   chromium | chrome | msedge | camoufox (по умолчанию "chrome")
-  --thread int            Макс. одновременных решений (по умолчанию 4)
-  --proxy                 Случайный прокси из proxies.txt
+  --thread int            Максимум параллельных задач (по умолчанию 4)
+  --proxy                 Использовать случайный прокси из proxies.txt
   --useragent string      Свой User-Agent
   --debug                 Подробные логи + HTTP access-логи
-  --host string           Адрес прослушивания (по умолчанию "0.0.0.0")
+  --host string           Адрес (по умолчанию "0.0.0.0")
   --port string           Порт (по умолчанию "5072")
 ```
 
@@ -86,46 +86,46 @@ python test_solve.py --type cf_clearance --proxy http://user:pass@ip:port
 
 ---
 
-## API документация
+## API-документация
 
-### Решение Turnstile
+### Turnstile
 
 ```
 GET /turnstile?url=https://example.com&sitekey=0x4AAAAAAA
 ```
 
-| Параметр | Тип | Описание | Обязательный |
-|-----------|------|-------------|----------|
-| `url` | string | Страница, где валидируется Turnstile | Да |
-| `sitekey` | string | Site key Turnstile | Да |
-| `action` | string | Привязка `data-action` виджета | Нет |
-| `cdata` | string | Привязка `data-cdata` виджета | Нет |
+| Параметр | Тип | Описание | Обязателен |
+|----------|-----|----------|------------|
+| `url` | string | Страница, на которой валидируется Turnstile | Да |
+| `sitekey` | string | Ключ сайта Turnstile | Да |
+| `action` | string | Привязка виджета `data-action` | Нет |
+| `cdata` | string | Привязка виджета `data-cdata` | Нет |
 
-### Прохождение IUAM (cf_clearance)
+### IUAM (cf_clearance)
 
 ```
 GET /cf_clearance?url=https://protected.com&proxy=http://user:pass@ip:port
 ```
 
-| Параметр | Тип | Описание | Обязательный |
-|-----------|------|-------------|----------|
+| Параметр | Тип | Описание | Обязателен |
+|----------|-----|----------|------------|
 | `url` | string | URL страницы под защитой Cloudflare | Да |
-| `proxy` | string | Прокси на запрос (cf_clearance привязан к IP выхода) | Нет |
-| `timeout` | int | Таймаут решения, секунд (по умолчанию 60) | Нет |
+| `proxy` | string | Прокси на запрос (cf_clearance привязан к выходному IP) | Нет |
+| `timeout` | int | Таймаут задачи, секунды (по умолчанию 60) | Нет |
 
 Оба эндпоинта возвращают задачу:
 
 ```json
-{ "errorId": 0, "taskId": "d2cbb257-9c37-4f9c-9bc7-1eaee72d96a8" }
+{ "errorId": 0, "taskId": "d2bcb257-9c37-4f9c-9bc7-1eaee72d96a8" }
 ```
 
 ### Получение результата
 
 ```
-GET /result?id=d2cbb257-9c37-4f9c-9bc7-1eaee72d96a8
+GET /result?id=d2bcb257-9c37-4f9c-9bc7-1eaee72d96a8
 ```
 
-В процессе:
+В обработке:
 
 ```json
 { "status": "processing" }
@@ -149,12 +149,12 @@ cf_clearance готов:
     "user_agent": "Mozilla/5.0 ...",
     "headers": { "User-Agent": "...", "Accept-Language": "..." },
     "proxy": "http://...",
-    "warning": "cf_clearance is bound to IP + JA3/TLS + User-Agent..."
+    "warning": "cf_clearance привязан к IP + JA3/TLS + User-Agent..."
   }
 }
 ```
 
-> ⚠️ Replay `cf_clearance` только с того же IP, с возвращённым `user_agent` и через клиент с подходящим TLS-фингерпринтом (curl-impersonate или реальный браузер).
+> ⚠️ Использовать `cf_clearance` повторно можно только с того же IP, с возвращённым `user_agent` и клиентом с совпадающим TLS-отпечатком (curl-impersonate или реальный браузер).
 
 ---
 
@@ -162,17 +162,17 @@ cf_clearance готов:
 
 ```
 Turnstile-Solver-NEW/
-├── api.py               # Quart app: роуты, задачи в памяти, CLI
+├── api.py               # Quart-приложение: маршруты, задачи в памяти, CLI
 ├── test_solve.py        # Тестовый клиент (turnstile / cf_clearance)
 ├── requirements.txt
 ├── core/
-│   ├── browser.py       # Конфиг браузера, запуск, контекст, прокси
+│   ├── browser.py       # Конфигурация браузера, запуск, контекст, прокси
 │   ├── logger.py        # Цветной логгер
 │   └── templates.py     # HTML-шаблон Turnstile, JS-сниппеты, route glob
 ├── turnstile/
-│   └── solve.py         # Route-intercept + real-page решение Turnstile
+│   └── solve.py         # Route-intercept + автоматизация Turnstile на реальной странице
 └── cf_clearance/
-    └── solve.py         # Прохождение IUAM + получение cf_clearance
+    └── solve.py         # Прохождение IUAM interstitial + cf_clearance-сессия
 ```
 
 ---
@@ -185,7 +185,7 @@ Turnstile-Solver-NEW/
 ### "Port already in use"
 Смените порт: `python api.py --port 5080`.
 
-### cf_clearance not set (challenge unsolved)
+### cf_clearance not set (челлендж не пройден)
 Датацентровские IP оцениваются строго — запустите с `--no-headless` и/или резидентским прокси.
 
 ---
@@ -196,19 +196,14 @@ Turnstile-Solver-NEW/
 - **Telegram Канал**: [@D3_vin](https://t.me/D3_vin)
 - **Telegram Чат**: [@D3vin_chat](https://t.me/D3vin_chat)
 
-### ❤️ Поддержать проект
-
-- **EVM:** 0xeba21af63e707ce84b76a87d0ba82140048c057e (ETH, BNB, etc)
-- **TRON:** TEfECnyz5G1EkFrUqnbFcWLVdLvAgW9Raa
-- **TON:** UQCJ7KC2zxV_zKwLahaHf9jxy0vsWRcvQFie_FUBJW-9LcEW
-- **BTC:** bc1qdag98y5yahs6wf7rsfeh4cadsjfzmn5ngpjrcf
-- **SOL:** EwXXR4VqmWSNz1sjhZ8qcQ882i4URwAwhixSPEbDzyv6
-- **SUI:** 0x76da9b74c61508fbbd0b3e1989446e036b0622f252dd8d07c3fce759b239b47d
-
 ---
 
 ## Лицензия
 
-Только для образовательных целей - см. файл [LICENSE](LICENSE).
+Только для образовательных целей — см. файл [LICENSE](LICENSE).
 
-**⚠️ Дисклеймер**: Инструмент создан в образовательных целях. Используйте на свой страх и риск. Автор не несёт ответственности за блокировки API, баны IP и иные последствия.
+## ⚠️ Отказ от ответственности
+
+ПО предоставляется **исключительно в образовательных и ознакомительных целях**, «как есть» (AS IS), без каких-либо гарантий. Автор не несёт ответственности за любое использование, блокировки API, баны IP и иные последствия — вся ответственность лежит на конечном пользователе. Не аффилировано с Cloudflare, Inc.
+
+> This software is provided for educational and research purposes only, "AS IS". The author is not responsible for any misuse.
