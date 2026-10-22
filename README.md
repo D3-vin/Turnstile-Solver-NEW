@@ -1,6 +1,6 @@
-# 🚀 Cloudflare Turnstile + Challenge Solver
+# 🚀 Cloudflare Turnstile & IUAM Automation API
 
-Local API solver for Cloudflare Turnstile and IUAM (Under Attack Mode) — harvests tokens and cf_clearance cookies via a real browser.
+Local REST API for automated handling of Cloudflare Turnstile and IUAM (Under Attack Mode) challenge pages in a real browser — returns tokens and cf_clearance session bundles.
 
 [![Version](https://img.shields.io/badge/version-2.0.0-blue)](https://github.com/D3-vin/Turnstile-Solver-NEW/releases)
 [![Python](https://img.shields.io/badge/Python-3.8+-blue?logo=python)](https://www.python.org/)
@@ -16,13 +16,13 @@ Local API solver for Cloudflare Turnstile and IUAM (Under Attack Mode) — harve
 
 ---
 
-> **New in 2.0:** IUAM support — pass Cloudflare "Under Attack" interstitials and harvest `cf_clearance` via the new `/cf_clearance` endpoint. Modular architecture (`turnstile` / `cf_clearance` / `core`), in-memory task storage, quiet logs.
+> **New in 2.0:** IUAM support — pass Cloudflare "Under Attack" interstitials and get `cf_clearance` via the new `/cf_clearance` endpoint. Modular architecture (`turnstile` / `cf_clearance` / `core`), in-memory task storage, quiet logs.
 
 ## Features
 
-- 🎯 **Turnstile solving** - Route-intercept stub page with real-page fallback, 5-15 seconds per solve
-- 🛡️ **IUAM / Challenge pass** - Managed Challenge + JS Challenge interstitials, harvests `cf_clearance` with the full replay bundle (cookies, User-Agent, headers)
-- 🚀 **Multi-threaded** - Solve multiple tasks simultaneously with a concurrency limit
+- 🎯 **Turnstile challenge automation** - Route-intercept stub page with real-page fallback, 5-15 seconds per task
+- 🛡️ **IUAM / Challenge pass** - Managed Challenge + JS Challenge interstitials, returns `cf_clearance` with the full session bundle (cookies, User-Agent, headers)
+- 🚀 **Multi-threaded** - Multiple tasks simultaneously with a concurrency limit
 - 🌐 **Multiple browsers** - Chrome, Edge, Chromium, Camoufox
 - 🔌 **Proxy support** - All formats from `proxies.txt`, plus per-request proxy for `/cf_clearance`
 - 📊 **REST API** - Async task model (create task → poll result), easy to integrate
@@ -68,7 +68,7 @@ python api.py [options]
 Options:
   --no-headless           Show the browser window (default: headless)
   --browser_type string   chromium | chrome | msedge | camoufox (default "chrome")
-  --thread int            Max concurrent solves (default 4)
+  --thread int            Max concurrent tasks (default 4)
   --proxy                 Use random proxy from proxies.txt
   --useragent string      Custom User-Agent
   --debug                 Verbose logging + HTTP access logs
@@ -88,7 +88,7 @@ python test_solve.py --type cf_clearance --proxy http://user:pass@ip:port
 
 ## API Documentation
 
-### Solve Turnstile
+### Turnstile
 
 ```
 GET /turnstile?url=https://example.com&sitekey=0x4AAAAAAA
@@ -101,7 +101,7 @@ GET /turnstile?url=https://example.com&sitekey=0x4AAAAAAA
 | `action` | string | Widget `data-action` binding | No |
 | `cdata` | string | Widget `data-cdata` binding | No |
 
-### Pass IUAM (cf_clearance)
+### IUAM (cf_clearance)
 
 ```
 GET /cf_clearance?url=https://protected.com&proxy=http://user:pass@ip:port
@@ -111,7 +111,7 @@ GET /cf_clearance?url=https://protected.com&proxy=http://user:pass@ip:port
 |-----------|------|-------------|----------|
 | `url` | string | Cloudflare-protected page URL | Yes |
 | `proxy` | string | Per-request proxy (cf_clearance is bound to the exit IP) | No |
-| `timeout` | int | Solve timeout, seconds (default 60) | No |
+| `timeout` | int | Task timeout, seconds (default 60) | No |
 
 Both endpoints return a task:
 
@@ -170,9 +170,9 @@ Turnstile-Solver-NEW/
 │   ├── logger.py        # Colored logger
 │   └── templates.py     # Turnstile HTML template, JS snippets, route glob
 ├── turnstile/
-│   └── solve.py         # Route-intercept + real-page Turnstile solving
+│   └── solve.py         # Route-intercept + real-page Turnstile automation
 └── cf_clearance/
-    └── solve.py         # IUAM interstitial pass + cf_clearance harvest
+    └── solve.py         # IUAM interstitial pass + cf_clearance session bundle
 ```
 
 ---
@@ -185,7 +185,7 @@ Install the browser: `python -m patchright install chromium` (or use `--browser_
 ### "Port already in use"
 Change it: `python api.py --port 5080`.
 
-### cf_clearance not set (challenge unsolved)
+### cf_clearance not set (challenge not passed)
 Datacenter IPs are scored harshly — run with `--no-headless` and/or a residential proxy.
 
 ---
@@ -196,19 +196,14 @@ Datacenter IPs are scored harshly — run with `--no-headless` and/or a resident
 - **Telegram Channel**: [@D3_vin](https://t.me/D3_vin)
 - **Telegram Chat**: [@D3vin_chat](https://t.me/D3vin_chat)
 
-### ❤️ Support the Project
-
-- **EVM:** 0xeba21af63e707ce84b76a87d0ba82140048c057e (ETH, BNB, etc)
-- **TRON:** TEfECnyz5G1EkFrUqnbFcWLVdLvAgW9Raa
-- **TON:** UQCJ7KC2zxV_zKwLahaHf9jxy0vsWRcvQFie_FUBJW-9LcEW
-- **BTC:** bc1qdag98y5yahs6wf7rsfeh4cadsjfzmn5ngpjrcf
-- **SOL:** EwXXR4VqmWSNz1sjhZ8qcQ882i4URwAwhixSPEbDzyv6
-- **SUI:** 0x76da9b74c61508fbbd0b3e1989446e036b0622f252dd8d07c3fce759b239b47d
-
 ---
 
 ## License
 
-Educational use only - see [LICENSE](LICENSE) file.
+Educational use only — see [LICENSE](LICENSE).
 
-**⚠️ Disclaimer**: This tool is for educational purposes only. Use at your own risk. The author is not responsible for API blocking, IP bans, or any other consequences.
+## ⚠️ Disclaimer
+
+This software is provided **for educational and research purposes only**, "AS IS", without warranty of any kind. The author is not responsible for any misuse, API blocking, IP bans, or other consequences — responsibility lies entirely on the end user. By using it, you agree to the Terms of Service of the respective services and the laws of your country. Not affiliated with Cloudflare, Inc.
+
+> ПО предоставляется исключительно в образовательных и ознакомительных целях, «как есть». Автор не несёт ответственности за использование.
