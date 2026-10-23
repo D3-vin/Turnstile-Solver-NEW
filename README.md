@@ -79,7 +79,7 @@ Options:
 Test client:
 
 ```bash
-python test_solve.py                            # Turnstile (bypass.city)
+python test_solve.py                            # Turnstile demo
 python test_solve.py --type cf_clearance        # IUAM (ivasms.com)
 python test_solve.py --type cf_clearance --proxy http://user:pass@ip:port
 ```
